@@ -129,4 +129,7 @@ type Flags struct {
 
 	// GreenTeaGC enables the Green Tea GC implementation.
 	GreenTeaGC bool
+
+	// DeadlockGC enables the Deadlock GC implementation.
+	DeadlockGC bool
 }
