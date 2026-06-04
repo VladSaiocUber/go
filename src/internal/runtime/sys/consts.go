@@ -12,7 +12,7 @@ import (
 // AIX and OpenBSD require a larger stack for syscalls.
 // The race build also needs more stack. See issue 54291.
 // This arithmetic must match that in cmd/internal/objabi/stack.go:stackGuardMultiplier.
-const StackGuardMultiplier = 1 + goos.IsAix + goos.IsOpenbsd + isRace
+const StackGuardMultiplier = 1 + goos.IsAix + goos.IsOpenbsd + isRace + isRacelite
 
 // DefaultPhysPageSize is the default physical page size.
 const DefaultPhysPageSize = goarch.DefaultPhysPageSize

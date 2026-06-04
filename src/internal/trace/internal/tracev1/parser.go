@@ -1549,5 +1549,5 @@ const (
 	STWPageCachePagesLeaked    STWReason = 15
 	STWResetDebugLog           STWReason = 16
 
-	NumSTWReasons = 17
+	NumSTWReasons = 18
 )
