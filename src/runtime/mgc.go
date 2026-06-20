@@ -1404,7 +1404,7 @@ func gcMarkTermination(stw worldStop) {
 
 		// marking is complete so we can turn the write barrier off
 		setGCPhase(_GCoff)
-		if work.goroutineLeak.done {
+		if work.goroutineLeak.done && work.goroutineLeak.count > 0 {
 			print("goroutine leak detection: ", work.goroutineLeak.count,
 				" leaks waste ",
 				(work.goroutineLeak.leakedStackSize+work.bytesMarked-work.goroutineLeak.bytesMarkedRunnable)/1024,
