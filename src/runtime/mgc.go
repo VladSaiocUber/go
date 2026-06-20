@@ -1406,11 +1406,11 @@ func gcMarkTermination(stw worldStop) {
 		setGCPhase(_GCoff)
 		if work.goroutineLeak.done {
 			print("goroutine leak detection: ", work.goroutineLeak.count,
-				" leaked goroutines; wasted ",
+				" leaks waste ",
 				(work.goroutineLeak.leakedStackSize+work.bytesMarked-work.goroutineLeak.bytesMarkedRunnable)/1024,
 				"KB (", work.goroutineLeak.leakedStackSize/1024, "KB stacks; ",
-				(work.bytesMarked-work.goroutineLeak.bytesMarkedRunnable)/1024, "KB heap; ",
-				"", work.goroutineLeak.bytesMarkedRunnable/1024, "KB marked)\n")
+				(work.bytesMarked-work.goroutineLeak.bytesMarkedRunnable)/1024, "KB heap); ",
+				"", work.goroutineLeak.bytesMarkedRunnable/1024, "KB marked\n")
 		}
 		stwSwept = gcSweep(work.mode)
 	})
