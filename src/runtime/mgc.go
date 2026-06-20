@@ -414,6 +414,16 @@ type workType struct {
 		//
 		// Write-protected by STW in findGoroutineLeaks.
 		count int
+		// bytesMarkedRunnable is a snapshot of work.bytesMarked taken right after
+		// goroutine leak detection. It indicates how much memory is reachable
+		// from goroutines which are not leaked.
+		//
+		// Protected by STW in gcMarkDone.
+		bytesMarkedRunnable uint64
+		// The aggregated stack size of all leaked goroutines.
+		//
+		// Protected by STW in gcMarkDone.
+		leakedStackSize uint64
 	}
 
 	// Base indexes of each root type. Set by gcPrepareMarkRoots.
@@ -1317,6 +1327,9 @@ func findGoroutineLeaks() bool {
 		gp := work.stackRoots[i]
 		casgstatus(gp, _Gwaiting, _Gleaked)
 
+		// Accumulate the stack size of the leaked goroutine.
+		work.goroutineLeak.leakedStackSize += uint64(gp.stack.hi - gp.stack.lo)
+
 		// Add the primitives causing the goroutine leaks
 		// to the GC work queue, to ensure they are marked.
 		//
@@ -1336,6 +1349,12 @@ func findGoroutineLeaks() bool {
 	// Put the remaining roots as ready for marking and drain them.
 	work.markrootJobs.Add(int32(work.nStackRoots - work.nMaybeRunnableStackRoots))
 	work.nMaybeRunnableStackRoots = work.nStackRoots
+
+	// Record how much memory has been marked before goroutine leak detection.
+	if work.goroutineLeak.bytesMarkedRunnable == 0 {
+		work.goroutineLeak.bytesMarkedRunnable = work.bytesMarked
+	}
+
 	return true
 }
 
@@ -1385,6 +1404,14 @@ func gcMarkTermination(stw worldStop) {
 
 		// marking is complete so we can turn the write barrier off
 		setGCPhase(_GCoff)
+		if work.goroutineLeak.done {
+			print("goroutine leak detection: ", work.goroutineLeak.count,
+				" leaked goroutines; wasted ",
+				(work.goroutineLeak.leakedStackSize+work.bytesMarked-work.goroutineLeak.bytesMarkedRunnable)/1024,
+				"KB (", work.goroutineLeak.leakedStackSize/1024, "KB stacks; ",
+				(work.bytesMarked-work.goroutineLeak.bytesMarkedRunnable)/1024, "KB heap; ",
+				"", work.goroutineLeak.bytesMarkedRunnable/1024, "KB marked)\n")
+		}
 		stwSwept = gcSweep(work.mode)
 	})
 
@@ -1502,6 +1529,8 @@ func gcMarkTermination(stw worldStop) {
 		work.goroutineLeak.enabled = false
 		goroutineLeakDone = work.goroutineLeak.done
 		work.goroutineLeak.done = false
+		work.goroutineLeak.bytesMarkedRunnable = 0
+		work.goroutineLeak.leakedStackSize = 0
 
 		// The memstats updated above must be updated with the world
 		// stopped to ensure consistency of some values, such as
