@@ -424,8 +424,10 @@ type workType struct {
 		//
 		// Protected by STW in gcMarkDone.
 		leakedStackSize uint64
-		// Total goroutine stack size.
-		totalStackSize uint64
+		// The aggregated stack size of all runnable goroutines.
+		//
+		// Protected by STW in gcMarkDone.
+		runnableStackSize uint64
 	}
 
 	// Base indexes of each root type. Set by gcPrepareMarkRoots.
@@ -1352,7 +1354,7 @@ func findGoroutineLeaks() bool {
 	// Count total stack size of maybe-runnable goroutines.
 	for i := 0; i < work.nMaybeRunnableStackRoots; i++ {
 		gp := work.stackRoots[i]
-		work.goroutineLeak.totalStackSize += uint64(gp.stack.hi - gp.stack.lo)
+		work.goroutineLeak.runnableStackSize += uint64(gp.stack.hi - gp.stack.lo)
 	}
 
 	// Put the remaining roots as ready for marking and drain them.
@@ -1419,8 +1421,8 @@ func gcMarkTermination(stw worldStop) {
 				(work.goroutineLeak.leakedStackSize+work.bytesMarked-work.goroutineLeak.bytesMarkedRunnable)/1024,
 				"KB (", work.goroutineLeak.leakedStackSize/1024, "KB stacks; ",
 				(work.bytesMarked-work.goroutineLeak.bytesMarkedRunnable)/1024, "KB heap); ",
-				work.goroutineLeak.totalStackSize/1024, "KB total stacks; ",
-				"", work.bytesMarked/1024, "KB total heap; ")
+				(work.goroutineLeak.runnableStackSize+work.goroutineLeak.leakedStackSize)/1024, "KB total stacks; ",
+				"", work.bytesMarked/1024, "KB total heap\n")
 		}
 		stwSwept = gcSweep(work.mode)
 	})
@@ -1541,6 +1543,7 @@ func gcMarkTermination(stw worldStop) {
 		work.goroutineLeak.done = false
 		work.goroutineLeak.bytesMarkedRunnable = 0
 		work.goroutineLeak.leakedStackSize = 0
+		work.goroutineLeak.runnableStackSize = 0
 
 		// The memstats updated above must be updated with the world
 		// stopped to ensure consistency of some values, such as
