@@ -666,6 +666,7 @@ func sighandler(sig uint32, info *siginfo, ctxt unsafe.Pointer, gp *g) {
 		// Some platforms (Linux) have per-thread timers, which we use in
 		// combination with the process-wide timer. Avoid double-counting.
 		if !delayedSignal && validSIGPROF(mp, c) {
+			decoderHandleSigprof(c)
 			sigprof(c.sigpc(), c.sigsp(), c.siglr(), gp, mp)
 		}
 		return

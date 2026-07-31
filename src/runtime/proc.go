@@ -356,6 +356,7 @@ func init() {
 
 func runExitHooks(code int) {
 	exithook.Run(code)
+	decoderPrintMemOpTable()
 }
 
 // start forcegc helper goroutine
@@ -915,6 +916,10 @@ func schedinit() {
 	// mcommoninit runs before parsedebugvars, so init profstacks again.
 	mProfStackInit(gp.m)
 	defaultGOMAXPROCSInit()
+
+	// Initialize the Intel XED-based instruction decoder used to inspect
+	// the interrupted instruction on SIGPROF (see decoder_linux_amd64.go).
+	decoderInit()
 
 	lock(&sched.lock)
 	sched.lastpoll.Store(nanotime())

@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la ~/go-race/inst_decode/ ~/go-race/inst_decode/lib/ 2>/dev/null)",
+      "Read(//project/adams/home/angelee/go-race/inst_decode/**)",
+      "Read(//project/adams/home/angelee/go-race/**)",
+      "Bash(find / -maxdepth 6 -iname \"go-tests\")",
+      "Read(//project/adams/home/angelee/**)",
+      "Bash(xargs ls -la)",
+      "Bash(~/go-race/go/bin/go version *)",
+      "Bash(mkdir -p ~/go-race/go-tests/sigprof_decoder && ls -la ~/go-race/go-tests)",
+      "Bash(GOROOT=/project/adams/home/angelee/go-race/go /project/adams/home/angelee/go-race/go/bin/go build -ldflags=-linkmode=external -o /tmp/claude-1849302/-project-adams-home-angelee-go-race-go-src/98c0ac45-3230-4819-aa76-3ee2a91399bb/scratchpad/sigprof_decoder_test ./main.go)",
+      "Bash(/tmp/claude-1849302/-project-adams-home-angelee-go-race-go-src/98c0ac45-3230-4819-aa76-3ee2a91399bb/scratchpad/sigprof_decoder_test)",
+      "Bash(echo \"---exit code: $?---\")"
+    ],
+    "additionalDirectories": [
+      "/project/adams/home/angelee/go-race/go-tests"
+    ]
+  }
+}
