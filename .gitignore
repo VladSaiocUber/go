@@ -39,6 +39,7 @@ _testmain.go
 /src/go/doc/headscan
 /src/internal/buildcfg/zbootstrap.go
 /src/internal/runtime/sys/zversion.go
+/src/runtime/decoder_linux_amd64.syso
 /src/unicode/maketables
 /src/time/tzdata/zzipdata.go
 /test.out

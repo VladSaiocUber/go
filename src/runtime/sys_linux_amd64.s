@@ -47,6 +47,7 @@
 #define SYS_openat		257
 #define SYS_faccessat		269
 #define SYS_pipe2		293
+#define SYS_perf_event_open	298
 
 TEXT runtime·exit(SB),NOSPLIT,$0-4
 	MOVL	code+0(FP), DI
@@ -568,6 +569,22 @@ TEXT runtime·futex(SB),NOSPLIT,$0
 	MOVL	$SYS_futex, AX
 	SYSCALL
 	MOVL	AX, ret+40(FP)
+	RET
+
+// func perfEventOpen(attr *perfEventAttr, pid, cpu, groupFd int32, flags uint64) int32
+//
+// Used by the hardware-watchpoint race detector (watchpoint_linux_amd64.go) to open a
+// PERF_TYPE_BREAKPOINT event directly against another M's tid (pid argument), from inside
+// a SIGPROF handler. Raw syscall wrapper since the runtime doesn't import libc.
+TEXT runtime·perfEventOpen(SB),NOSPLIT,$0-36
+	MOVQ	attr+0(FP), DI
+	MOVL	pid+8(FP), SI
+	MOVL	cpu+12(FP), DX
+	MOVL	groupFd+16(FP), R10
+	MOVQ	flags+24(FP), R8
+	MOVL	$SYS_perf_event_open, AX
+	SYSCALL
+	MOVL	AX, ret+32(FP)
 	RET
 
 // int32 clone(int32 flags, void *stk, M *mp, G *gp, void (*fn)(void));

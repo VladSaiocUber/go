@@ -37,7 +37,7 @@ const decoderMaxMemOps = 2 // matches MAX_MEM_OPS in decoder.h
 func decoderInitCall()
 
 //go:noescape
-func decoderExtractMemAddrCall(instrAddr uint64, regs *decoderRegs, memOps *decoderMemOpInfo) uint32
+func decoderExtractMemAddrCall(instrAddr uint64, regs *decoderRegs, memOps *decoderMemOpInfo, outLen *uint32) uint32
 
 var decoderReady atomic.Bool
 
@@ -75,49 +75,66 @@ func decoderHash(addr uint64) uint32 {
 // at instrAddr. Called from the SIGPROF path (which multiple threads can receive
 // concurrently), so it must not allocate or take locks.
 //
-//go:nosplit
-//go:nowritebarrierrec
-func decoderRecordMemOp(instrAddr uint64, op *decoderMemOpInfo) {
-	if instrAddr == 0 {
-		return
-	}
-	var h uint32 = decoderHash(instrAddr)
-	for i := uint32(0); i < decoderMemOpTableSize; i++ {
-		// linear probling open address hash
-		var e *decoderMemOpEntry = &decoderMemOpTable[(h+i)&decoderMemOpTableMask]
-		var cur uint64 = e.key.Load()
-		if cur == 0 && e.key.CompareAndSwap(0, instrAddr) {
-			e.op = *op
-			e.ready.Store(true)
-			decoderMemOpCount.Add(1)
-			return
-		}
-		// cur != 0 and no CAS performed || CAS failed
-		if cur == instrAddr || e.key.Load() == instrAddr {
-			// Already claimed by this instruction address; refresh the
-			// recorded operand. This can race with a concurrent printer
-			// reading e.op, or with another thread's SIGPROF handler
-			// concurrently recording the same instrAddr and writing e.op
-			// (last writer wins on op.addr, the only field that can differ
-			// between racers). Both are acceptable for this best-effort,
-			// statistics-only table.
-			e.op = *op
-			e.ready.Store(true)
-			return
-		}
-	}
-	decoderMemOpDropped.Add(1)
-}
-
-// decoderHandleSigprof is called from sighandler for every delivered
-// SIGPROF, before the normal profiling sample is taken. It mirrors
-// sigtrap_handler in inst_decode/test_decoder.c: decode the instruction the
-// interrupted thread was about to execute and, if it is a real memory
-// operand, record it.
+// Commented out: this was Step 1's testing/diagnostic scaffolding (dumped via
+// decoderPrintMemOpTable below, also commented out) and isn't needed for Step 2's
+// arm/detect path. Left in place, not deleted: decoderMemOpTable/decoderMemOpEntry/
+// decoderHash below are still live and are a reasonable starting point if a future
+// optimization needs to memoize part of a decoded instruction on the Go side (to
+// reconstruct memory operand addresses without calling back into the decoder library).
 //
-//go:nosplit
+// //go:nosplit
+// //go:nowritebarrierrec
+// func decoderRecordMemOp(instrAddr uint64, op *decoderMemOpInfo) {
+// 	if instrAddr == 0 {
+// 		return
+// 	}
+// 	var h uint32 = decoderHash(instrAddr)
+// 	for i := uint32(0); i < decoderMemOpTableSize; i++ {
+// 		// linear probling open address hash
+// 		var e *decoderMemOpEntry = &decoderMemOpTable[(h+i)&decoderMemOpTableMask]
+// 		var cur uint64 = e.key.Load()
+// 		if cur == 0 && e.key.CompareAndSwap(0, instrAddr) {
+// 			e.op = *op
+// 			e.ready.Store(true)
+// 			decoderMemOpCount.Add(1)
+// 			return
+// 		}
+// 		// cur != 0 and no CAS performed || CAS failed
+// 		if cur == instrAddr || e.key.Load() == instrAddr {
+// 			// Already claimed by this instruction address; refresh the
+// 			// recorded operand. This can race with a concurrent printer
+// 			// reading e.op, or with another thread's SIGPROF handler
+// 			// concurrently recording the same instrAddr and writing e.op
+// 			// (last writer wins on op.addr, the only field that can differ
+// 			// between racers). Both are acceptable for this best-effort,
+// 			// statistics-only table.
+// 			e.op = *op
+// 			e.ready.Store(true)
+// 			return
+// 		}
+// 	}
+// 	decoderMemOpDropped.Add(1)
+// }
+
+// raceSampleSigprof is called from sighandler for every delivered SIGPROF, before the normal
+// profiling sample is taken. It mirrors sigtrap_handler in inst_decode/test_decoder.c: decode
+// the instruction the interrupted thread was about to execute, and for every real memory operand
+// found (one for most instructions, two for movs/cmps-style instructions), both record it (as
+// before) and drive the hardware-watchpoint race detector: capture this thread's own stack once,
+// publish each real operand into its own activeWatchpoints slot, arm a watchpoint per operand on
+// every other live thread — both operands concurrently in one shared round when there are two,
+// not sequentially — sleep for a short configurable window, then disarm everything this call
+// armed. See race_detector_plan.md for the full design.
+//
+// Deliberately not //go:nosplit: sigprof (called right after this, from the same _SIGPROF
+// branch in sighandler) isn't nosplit either.  gsignal's stack is fixed-size (malg(32*1024),
+// os_linux.go) and cannot grow at all; exceeding stack size causes a fatal crash, but we are
+// ok here because this call chain's real stack usage comfortably fits within the fixed 32KB,
+// The //go:nosplit's own static analysis exists to *guarantee* a call chain can never need
+// to grow and has a much more conservative ~792-byte budget.
+//
 //go:nowritebarrierrec
-func decoderHandleSigprof(c *sigctxt) {
+func raceSampleSigprof(c *sigctxt, gp *g) {
 	if !decoderReady.Load() {
 		return
 	}
@@ -131,41 +148,80 @@ func decoderHandleSigprof(c *sigctxt) {
 	}
 
 	var memOps [decoderMaxMemOps]decoderMemOpInfo
-	var n uint32 = decoderExtractMemAddrCall(regs.rip, &regs, &memOps[0])
+	var decodedLen uint32 // unused on this path; see decodeAccessorDirection for why it matters there
+	var n uint32 = decoderExtractMemAddrCall(regs.rip, &regs, &memOps[0], &decodedLen)
 	if n > decoderMaxMemOps {
 		n = decoderMaxMemOps
 	}
-	for i := uint32(0); i < n; i++ {
-		// XED reports address-generation-only instructions (e.g. leaq) as
-		// memory operands with a zero size; those are not real accesses.
-		if memOps[i].numBytes == 0 {
-			continue
-		}
-		decoderRecordMemOp(regs.rip, &memOps[i])
+	if n == 0 {
+		return
 	}
+
+	// extract_mem_addr already packs mem_op_infos with only real operands (num_bytes > 0);
+	// no need to filter zero-length address-generation-only entries here.
+	//
+	// decoderRecordMemOp (Step 1 testing/diagnostic scaffolding) is commented out -- see
+	// its definition above.
+	// for i := uint32(0); i < n; i++ {
+	// 	decoderRecordMemOp(regs.rip, &memOps[i])
+	// }
+	sampleAndWatch(c, gp, memOps[:n])
+}
+
+// sampleAndWatch captures the interrupted thread's own stack trace once, publishes each real
+// operand (1 or 2) into its own activeWatchpoints slot, arms a watchpoint per operand on every
+// other live M — concurrently, in one shared round, via a single armWatchpoints call — sleeps for
+// the configurable window, then disarms everything it armed.
+//
+//go:nowritebarrierrec
+func sampleAndWatch(c *sigctxt, gp *g, ops []decoderMemOpInfo) {
+	// Mirrors sigprof's own guard immediately below in the same handler: this runs
+	// concurrently with GC and must not allocate; incrementing mallocing++ will cause
+	// any accidental allocation in the nested call to fail and fault.
+	getg().m.mallocing++
+	var u unwinder
+	var stk [maxCPUProfStack]uintptr
+	u.initAt(c.sigpc(), c.sigsp(), c.siglr(), gp, unwindSilentErrors|unwindTrap|unwindJumpStack)
+	n := tracebackPCs(&u, 0, stk[:])
+	getg().m.mallocing--
+
+	var ops2 [decoderMaxMemOps]watchOp
+	for i, op := range ops {
+		isWrite := op.isWrite != 0
+		publishActiveWatchpoint(i, op.addr, op.numBytes, isWrite, gp.goid, stk[:n])
+		ops2[i] = watchOp{addr: op.addr, size: op.numBytes, isWrite: isWrite}
+	}
+	armWatchpoints(ops2[:len(ops)])
+	usleep(uint32(debug.raceWatchWindowUs))
+	disarmWatchpoints()
 }
 
 // decoderPrintMemOpTable dumps every recorded (instruction address -> memory
 // operand) entry. Called once as the program exits so test programs can
 // inspect what the SIGPROF path decoded over the run.
-func decoderPrintMemOpTable() {
-	if !decoderReady.Load() {
-		return
-	}
-	print("decoder: ", decoderMemOpCount.Load(), " memory operand(s) recorded via SIGPROF")
-	var d uint32 = decoderMemOpDropped.Load()
-	if d > 0 {
-		print(" (", d, " dropped, table full)")
-	}
-	print("\n")
-	for i := range decoderMemOpTable {
-		var e *decoderMemOpEntry = &decoderMemOpTable[i]
-		if !e.ready.Load() {
-			continue
-		}
-		var instrAddr uint64 = e.key.Load()
-		var op decoderMemOpInfo = e.op
-		print("decoder: instr=", hex(instrAddr), " addr=", hex(op.addr),
-			" bytes=", op.numBytes, " write=", op.isWrite != 0, "\n")
-	}
-}
+//
+// Commented out along with decoderRecordMemOp above (its only source of data) -- Step 1
+// testing/diagnostic scaffolding, not needed for Step 2. See decoder_stub.go and proc.go's
+// runExitHooks for the matching commented-out stub and call site.
+//
+// func decoderPrintMemOpTable() {
+// 	if !decoderReady.Load() {
+// 		return
+// 	}
+// 	print("decoder: ", decoderMemOpCount.Load(), " memory operand(s) recorded via SIGPROF")
+// 	var d uint32 = decoderMemOpDropped.Load()
+// 	if d > 0 {
+// 		print(" (", d, " dropped, table full)")
+// 	}
+// 	print("\n")
+// 	for i := range decoderMemOpTable {
+// 		var e *decoderMemOpEntry = &decoderMemOpTable[i]
+// 		if !e.ready.Load() {
+// 			continue
+// 		}
+// 		var instrAddr uint64 = e.key.Load()
+// 		var op decoderMemOpInfo = e.op
+// 		print("decoder: instr=", hex(instrAddr), " addr=", hex(op.addr),
+// 			" bytes=", op.numBytes, " write=", op.isWrite != 0, "\n")
+// 	}
+// }

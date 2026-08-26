@@ -48,6 +48,11 @@ func (c *sigctxt) gs() uint64      { return uint64(c.regs().gs) }
 func (c *sigctxt) sigcode() uint64 { return uint64(c.info.si_code) }
 func (c *sigctxt) sigaddr() uint64 { return c.info.si_addr }
 
+// sigperfdata returns si_perf_data — valid only when sigcode() == _TRAP_PERF, the
+// user-provided value (perfEventAttr.sigData) the kernel passes back to identify which
+// perf_event_open watchpoint triggered a synchronous SIGTRAP. See watchpoint_linux_amd64.go.
+func (c *sigctxt) sigperfdata() uint64 { return c.info.si_perf_data }
+
 func (c *sigctxt) set_rip(x uint64)     { c.regs().rip = x }
 func (c *sigctxt) set_rsp(x uint64)     { c.regs().rsp = x }
 func (c *sigctxt) set_sigcode(x uint64) { c.info.si_code = int32(x) }

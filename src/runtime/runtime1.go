@@ -331,6 +331,8 @@ var debug struct {
 	traceCheckStackOwnership int32
 	profstackdepth           int32
 	dataindependenttiming    int32
+	raceWatchWindowUs        int32
+	raceSampleHz             int32
 
 	// debug.malloc is used as a combined debug check
 	// in the malloc function and should be set
@@ -390,6 +392,8 @@ var dbgvars = []*dbgVar{
 	{name: "madvdontneed", value: &debug.madvdontneed},
 	{name: "panicnil", atomic: &debug.panicnil},
 	{name: "profstackdepth", value: &debug.profstackdepth, def: 128},
+	{name: "racesamplehz", value: &debug.raceSampleHz, def: 500},
+	{name: "racewatchwindowus", value: &debug.raceWatchWindowUs, def: 1000},
 	{name: "sbrk", value: &debug.sbrk},
 	{name: "scavtrace", value: &debug.scavtrace},
 	{name: "scheddetail", value: &debug.scheddetail},

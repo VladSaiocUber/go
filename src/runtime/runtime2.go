@@ -708,6 +708,17 @@ type m struct {
 	// Whether this is a pending preemption signal on this M.
 	signalPending atomic.Uint32
 
+	// watchpointFD holds the hardware watchpoint fds (from perf_event_open) some sampling
+	// thread has currently armed on this M, one per operand slot (-1 if none) — two slots so
+	// an instruction with two real memory operands (movs/cmps) can be watched concurrently
+	// in one round instead of two sequential ones. Written by that sampling thread's
+	// armWatchpoints, and read/cleared either by that same thread's disarmWatchpoints or by
+	// this M's own handleWatchpointTrap when the watchpoint fires — always via
+	// swap-and-close-if-valid, never a plain Store, since a second, concurrently-sampling
+	// thread's arm round can land on this M before either of those runs. See
+	// watchpoint_linux_amd64.go and race_detector_plan.md.
+	watchpointFD [2]atomic.Int32
+
 	// pcvalue lookup cache
 	pcvalueCache pcvalueCache
 

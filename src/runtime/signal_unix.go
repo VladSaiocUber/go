@@ -666,9 +666,17 @@ func sighandler(sig uint32, info *siginfo, ctxt unsafe.Pointer, gp *g) {
 		// Some platforms (Linux) have per-thread timers, which we use in
 		// combination with the process-wide timer. Avoid double-counting.
 		if !delayedSignal && validSIGPROF(mp, c) {
-			decoderHandleSigprof(c)
+			raceSampleSigprof(c, gp)
 			sigprof(c.sigpc(), c.sigsp(), c.siglr(), gp, mp)
 		}
+		return
+	}
+
+	// A SIGTRAP may be this thread's own hardware watchpoint (armed on it by some other,
+	// concurrently-sampling thread's raceSampleSigprof) firing. handleWatchpointTrap checks
+	// si_code itself and returns false for anything else, so this is safe to call
+	// unconditionally ahead of the existing testSigtrap hook.
+	if sig == _SIGTRAP && handleWatchpointTrap((*sigctxt)(noescape(unsafe.Pointer(c))), gp) {
 		return
 	}
 

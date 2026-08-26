@@ -356,7 +356,8 @@ func init() {
 
 func runExitHooks(code int) {
 	exithook.Run(code)
-	decoderPrintMemOpTable()
+	// decoderPrintMemOpTable() was Step 1 testing/diagnostic scaffolding; commented out
+	// along with its definition in decoder_linux_amd64.go/decoder_stub.go.
 }
 
 // start forcegc helper goroutine
@@ -921,6 +922,13 @@ func schedinit() {
 	// the interrupted instruction on SIGPROF (see decoder_linux_amd64.go).
 	decoderInit()
 
+	// When built with -tags hwrace (see hwrace_on.go/hwrace_off.go), enable SIGPROF-driven
+	// hardware-watchpoint race sampling automatically, without requiring the program to call
+	// runtime.SetCPUProfileRate itself. This mirrors how -race requires no source changes.
+	if hwraceAutoEnable {
+		SetCPUProfileRate(int(debug.raceSampleHz))
+	}
+
 	lock(&sched.lock)
 	sched.lastpoll.Store(nanotime())
 	var procs int32
@@ -1023,6 +1031,14 @@ func mcommoninit(mp *m, id int64) {
 	mpreinit(mp)
 	if mp.gsignal != nil {
 		mp.gsignal.stackguard1 = mp.gsignal.stack.lo + stackGuard
+	}
+
+	// watchpointFD's zero value (0) is a real, valid fd (stdin) — every element must be set to
+	// the -1 "none" sentinel before mp is published into allm below, otherwise another
+	// thread's armWatchpoints could read the zero value as a live fd and closefd(0) on this
+	// process's stdin.
+	for i := range mp.watchpointFD {
+		mp.watchpointFD[i].Store(-1)
 	}
 
 	// Add to allm so garbage collector doesn't free g->m

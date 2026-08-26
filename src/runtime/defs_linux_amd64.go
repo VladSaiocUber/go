@@ -34,6 +34,19 @@ const (
 	_SI_KERNEL = 0x80
 	_SI_TIMER  = -0x2
 
+	// TRAP_PERF: si_code delivered with SIGTRAP when a PERF_TYPE_BREAKPOINT event with
+	// sigtrap=1 fires (Linux 5.13+, include/uapi/asm-generic/siginfo.h). Distinct from the
+	// older ptrace debug-register TRAP_HWBKPT.
+	_TRAP_PERF = 0x6
+
+	// PERF_TYPE_BREAKPOINT and HW_BREAKPOINT_* from linux/perf_event.h and
+	// linux/hw_breakpoint.h, used by the hardware-watchpoint race detector
+	// (watchpoint_linux_amd64.go) to build perf_event_attr for perfEventOpen.
+	_PERF_TYPE_BREAKPOINT = 0x5
+	_HW_BREAKPOINT_R      = 0x1 // unused
+	_HW_BREAKPOINT_W      = 0x2
+	_HW_BREAKPOINT_RW     = 0x3
+
 	_SIGHUP    = 0x1
 	_SIGINT    = 0x2
 	_SIGQUIT   = 0x3
@@ -126,8 +139,19 @@ type siginfoFields struct {
 	si_signo int32
 	si_errno int32
 	si_code  int32
-	// below here is a union; si_addr is the only field we use
-	si_addr uint64
+	// below here is a union; si_addr and si_perf_data are the only fields we use.
+	//
+	// si_perf_data aliases si_addr's sibling arm of the union (asm-generic/siginfo.h's
+	// _sigfault._perf._data, used when si_code == TRAP_PERF), immediately after si_addr's 8
+	// bytes. glibc's own <signal.h> siginfo_t doesn't model this newer TRAP_PERF-specific
+	// union arm at all, so its offset was verified independently by reconstructing the
+	// kernel's actual struct layout: byte offset 24, exactly 8 bytes after si_addr (offset
+	// 16, reached here via ordinary Go struct alignment — 3 leading int32s plus the padding
+	// natural 8-byte alignment inserts before a uint64 field). Declaring one more uint64
+	// field immediately after si_addr lands it at offset 24 automatically, no unsafe pointer
+	// arithmetic needed.
+	si_addr      uint64
+	si_perf_data uint64
 }
 
 type siginfo struct {

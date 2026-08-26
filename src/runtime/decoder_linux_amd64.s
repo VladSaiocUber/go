@@ -18,19 +18,20 @@ TEXT runtime·decoderInitCall(SB), NOSPLIT, $0-0
 	MOVQ	$decoder_init(SB), AX
 	JMP	decodercall<>(SB)
 
-// func decoderExtractMemAddrCall(instrAddr uint64, regs *decoderRegs, memOps *decoderMemOpInfo) uint32
-TEXT runtime·decoderExtractMemAddrCall(SB), NOSPLIT, $0-28
+// func decoderExtractMemAddrCall(instrAddr uint64, regs *decoderRegs, memOps *decoderMemOpInfo, outLen *uint32) uint32
+TEXT runtime·decoderExtractMemAddrCall(SB), NOSPLIT, $0-36
 	MOVQ	instrAddr+0(FP), DI
 	MOVQ	regs+8(FP), SI
 	MOVQ	memOps+16(FP), DX
+	MOVQ	outLen+24(FP), CX
 	MOVQ	$extract_mem_addr(SB), AX
 	CALL	decodercall<>(SB)
-	MOVL	AX, ret+24(FP)
+	MOVL	AX, ret+32(FP)
 	RET
 
 // Switches SP to the g0 stack (unless already on g0 or gsignal) and calls
 // the function whose address is in AX. Arguments are already loaded into
-// DI/SI/DX per the System V AMD64 ABI. On return AX holds the callee's
+// DI/SI/DX/CX per the System V AMD64 ABI. On return AX holds the callee's
 // return value and SP has been restored.
 TEXT decodercall<>(SB), NOSPLIT, $0-0
 	get_tls(R12)
