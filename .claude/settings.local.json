@@ -11,7 +11,23 @@
       "Bash(mkdir -p ~/go-race/go-tests/sigprof_decoder && ls -la ~/go-race/go-tests)",
       "Bash(GOROOT=/project/adams/home/angelee/go-race/go /project/adams/home/angelee/go-race/go/bin/go build -ldflags=-linkmode=external -o /tmp/claude-1849302/-project-adams-home-angelee-go-race-go-src/98c0ac45-3230-4819-aa76-3ee2a91399bb/scratchpad/sigprof_decoder_test ./main.go)",
       "Bash(/tmp/claude-1849302/-project-adams-home-angelee-go-race-go-src/98c0ac45-3230-4819-aa76-3ee2a91399bb/scratchpad/sigprof_decoder_test)",
-      "Bash(echo \"---exit code: $?---\")"
+      "Bash(echo \"---exit code: $?---\")",
+      "Bash(go env *)",
+      "Bash(gopls version *)",
+      "Bash(go version *)",
+      "Bash(GOROOT=/project/adams/home/angelee/go-race/go ../bin/go build runtime)",
+      "Bash(find / -maxdepth 6 -path \"*/User/settings.json\")",
+      "Bash(find / -maxdepth 8 -path \"*Code/User/settings.json\")",
+      "Bash(echo \"--- go-race/.vscode ---\"; cat /project/adams/home/angelee/go-race/.vscode/settings.json 2>/dev/null *)",
+      "Read(//project/adams/home/angelee/go-race/.vscode/**)",
+      "Bash(find / -xdev -maxdepth 10 -iname \"settings.json\" -path \"*vscode*\" 2>/dev/null | grep -v node_modules | head -30 *)",
+      "Read(//project/adams/home/angelee/.vscode-server/**)",
+      "Read(//project/adams/home/angelee/.vscode-server/data/Machine/**)",
+      "Read(//project/adams/home/angelee/.vscode-server/data/User/**)",
+      "Bash(/project/adams/home/angelee/go/bin/gopls version *)",
+      "Bash(/project/adams/home/angelee/go-race/go/bin/go list *)",
+      "Bash(echo \"exit=$?\")",
+      "Read(//tmp/**)"
     ],
     "additionalDirectories": [
       "/project/adams/home/angelee/go-race/go-tests"
